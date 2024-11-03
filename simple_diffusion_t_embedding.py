@@ -9,10 +9,11 @@ import torch.optim as optim
 import torch.nn as nn
 from sklearn.datasets import make_moons
 
-# Define the sinusoidal embedding function for time steps
+#sinusoidal embedding function for time steps
 def sinusoidal_embedding(timesteps, embedding_dim):
     """
     Creates sinusoidal embeddings for the time steps.
+    Look at "Attention is all you need" for more details.
     """
     device = timesteps.device
     half_dim = embedding_dim // 2
@@ -23,9 +24,11 @@ def sinusoidal_embedding(timesteps, embedding_dim):
     emb = torch.cat([torch.sin(emb), torch.cos(emb)], dim=1)
     return emb
 
-# Define the Epsilon neural network model
+# Epsilon neural network model
 class Epsilon(nn.Module):
-    """Neural network model for noise prediction"""
+    """Neural network model for noise prediction
+    epsilon_theta: x_t, t -> noise
+    """
 
     def __init__(
         self,
@@ -75,7 +78,7 @@ class Epsilon(nn.Module):
 
     def forward(self, x, t_embedding):
         # Combine x and t embeddings
-        x = self.input_layer(x)
+        x = self.input_layer(x) 
         t_emb = self.time_mlp(t_embedding)
         h = x + t_emb  # Alternatively, you can concatenate and use another layer
         h = self.hidden_layers(h)
@@ -88,11 +91,16 @@ def get_x_t(x0, t, alpha_bar):
     """
     if not isinstance(x0, torch.Tensor):
         x0 = torch.tensor(x0)
+        
     epsilon = torch.randn_like(x0)
+    
     # Ensure t is a tensor of shape [batch_size]
     alpha_bar_t = alpha_bar[t].unsqueeze(1)  # Shape: [batch_size, 1]
+    
     sqrt_alpha_bar_t = torch.sqrt(alpha_bar_t)
+    
     sqrt_one_minus_alpha_bar_t = torch.sqrt(1 - alpha_bar_t)
+    
     xt = sqrt_alpha_bar_t * x0 + sqrt_one_minus_alpha_bar_t * epsilon
     return xt, epsilon
 
@@ -113,14 +121,23 @@ def plot_forward_xt(T_ex, x0, alpha_bar, N_plots=10):
 def sample_one(model, x0_shape, alpha, beta, alpha_bar, T, device):
     model.eval()
     with torch.no_grad():
+        
         x_t = torch.randn(x0_shape).to(device)
+        
         for i in reversed(range(T)):
+            
             t = torch.full((x0_shape[0],), i, dtype=torch.long).to(device)
+            
             t_embedding = sinusoidal_embedding(t, model.time_embedding_dim).to(device)
+            
             predicted_noise = model(x_t, t_embedding)
+            
             alpha_t = alpha[t].unsqueeze(1).to(device)
+            
             alpha_bar_t = alpha_bar[t].unsqueeze(1).to(device)
+            
             beta_t = beta[t].unsqueeze(1).to(device)
+            
             sigma_t = torch.sqrt(beta_t)
 
             if i > 0:
@@ -131,6 +148,7 @@ def sample_one(model, x0_shape, alpha, beta, alpha_bar, T, device):
             x_t = (1 / torch.sqrt(alpha_t)) * (
                 x_t - ((1 - alpha_t) / torch.sqrt(1 - alpha_bar_t)) * predicted_noise
             ) + sigma_t * z
+            
     model.train()
     return x_t
 
@@ -152,7 +170,7 @@ def train(epochs, x0, alpha_bar, T, device):
     loss_fn = nn.MSELoss()
     model.train()
 
-    batch_size = 256  # Adjust based on your memory constraints
+    batch_size = 256  
     dataset = torch.utils.data.TensorDataset(x0)
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
@@ -160,16 +178,27 @@ def train(epochs, x0, alpha_bar, T, device):
         epoch_loss = 0.0
         for batch_x0, in dataloader:
             batch_x0 = batch_x0.to(device)
+            
             t = torch.randint(low=0, high=T, size=(batch_x0.shape[0],), device=device)
+            
             optimizer.zero_grad()
+            
             xt, noise = get_x_t(batch_x0, t, alpha_bar)
+            
             t_embedding = sinusoidal_embedding(t, model.time_embedding_dim).to(device)
+            
             predicted_noise = model(xt, t_embedding)
+            
             loss = loss_fn(predicted_noise, noise)
+            
             loss.backward()
+            
             optimizer.step()
+            
             epoch_loss += loss.item() * batch_x0.size(0)
+       
         avg_loss = epoch_loss / len(dataloader.dataset)
+       
         if epoch % 10 == 0:
             print(f'Epoch {epoch}/{epochs}, Loss: {avg_loss:.6f}')
 
@@ -182,7 +211,7 @@ if __name__ == '__main__':
     print(f'Using device: {device}')
 
     # Generate the dataset
-    X, _ = make_moons(n_samples=30000, noise=0.1, random_state=0)
+    X, _ = make_moons(n_samples=30000, noise=0, random_state=0)
     plt.scatter(X[:, 0], X[:, 1], s=10)
     plt.title('Original Data')
     plt.show()
@@ -203,9 +232,10 @@ if __name__ == '__main__':
     plot_forward_xt(T_ex=T, x0=x0.cpu(), alpha_bar=alpha_bar.cpu(), N_plots=10)
 
     # Train the model
-    epochs = 100  # Adjust based on your needs
+    epochs = 100  
     epsilon_theta = train(epochs=epochs, x0=x0, alpha_bar=alpha_bar, T=T, device=device)
 
+    T_sample = 50
     # Generate new samples
     x_sample = sample_one(
         model=epsilon_theta,
@@ -213,11 +243,11 @@ if __name__ == '__main__':
         alpha=alpha,
         beta=beta,
         alpha_bar=alpha_bar,
-        T=T,
+        T=T_sample,
         device=device,
     )
-    x_sample = x_sample.cpu().numpy()
-    X_original = x0.cpu().numpy()
+    x_sample = x_sample.numpy()
+    X_original = x0.numpy()
 
     # Plot the generated samples and original data
     plt.figure(figsize=(8, 6))
