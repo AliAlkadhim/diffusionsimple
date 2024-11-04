@@ -1,13 +1,39 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# Import necessary libraries
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
 import torch.optim as optim
 import torch.nn as nn
 from sklearn.datasets import make_moons
+# Set numpy random seed for reproducibility
+np.random.seed(42)
+import time
+
+def time_type_of_func(_func=None):
+    def timer(func):
+        """Print the runtime of the decorated function"""
+        import functools
+        import time
+
+        @functools.wraps(func)
+        def wrapper_timer(*args, **kwargs):
+            start_time = time.perf_counter()
+            value = func(*args, **kwargs)
+            end_time = time.perf_counter()
+            run_time = end_time - start_time
+
+            print(f"this arbirary function took {run_time:.4f} secs")
+            return value
+
+        return wrapper_timer
+
+    if _func is None:
+        return timer
+    else:
+        return timer(_func)
+    
 
 #sinusoidal embedding function for time steps
 def sinusoidal_embedding(timesteps, embedding_dim):
@@ -80,14 +106,16 @@ class Epsilon(nn.Module):
         # Combine x and t embeddings
         x = self.input_layer(x) 
         t_emb = self.time_mlp(t_embedding)
-        h = x + t_emb  # Alternatively, you can concatenate and use another layer
+        h = x + t_emb  # Alternatively, you can concatenate and use another layer 
         h = self.hidden_layers(h)
         return self.output_layer(h)
 
 # Function to get x_t and noise epsilon at time t
+# @time_type_of_func()
 def get_x_t(x0, t, alpha_bar):
     """
     Get the noisy data x_t and the noise that was added to it at time t
+    x_t ~ q(x_t | x_{t-1})
     """
     if not isinstance(x0, torch.Tensor):
         x0 = torch.tensor(x0)
@@ -105,6 +133,21 @@ def get_x_t(x0, t, alpha_bar):
     return xt, epsilon
 
 # Function to plot the forward diffusion process
+@time_type_of_func()
+def plot_forward_xt_jet(T_ex, x0, alpha_bar, N_plots=10):
+    fig, axs = plt.subplots(1, N_plots, figsize=(20, 10))
+    den = T_ex // N_plots
+    for idx, t in enumerate(range(0, T_ex, den)):
+        print(f't={t}')
+        t_batch = torch.full((x0.shape[0],), t, dtype=torch.long)
+        xt, _ = get_x_t(x0, t_batch, alpha_bar)
+        axs[idx].set_title(f't = {t}')
+        axs[idx].hist(xt[:,2].numpy().flatten())
+    plt.tight_layout()
+    plt.show()
+    
+    
+    
 def plot_forward_xt(T_ex, x0, alpha_bar, N_plots=10):
     fig, axs = plt.subplots(1, N_plots, figsize=(20, 2))
     den = T_ex // N_plots
@@ -118,6 +161,7 @@ def plot_forward_xt(T_ex, x0, alpha_bar, N_plots=10):
     plt.show()
 
 # Function to sample new data points using the trained model
+# @time_type_of_func()
 def sample_one(model, x0_shape, alpha, beta, alpha_bar, T, device):
     model.eval()
     with torch.no_grad():
@@ -153,6 +197,7 @@ def sample_one(model, x0_shape, alpha, beta, alpha_bar, T, device):
     return x_t
 
 # Training function
+@time_type_of_func()
 def train(epochs, x0, alpha_bar, T, device):
     """
     Train the model to predict the noise
@@ -211,7 +256,9 @@ if __name__ == '__main__':
     print(f'Using device: {device}')
 
     # Generate the dataset
-    X, _ = make_moons(n_samples=30000, noise=0, random_state=0)
+    X, _ = make_moons(n_samples=3000, 
+                      noise=0, 
+                      random_state=0)
     plt.scatter(X[:, 0], X[:, 1], s=10)
     plt.title('Original Data')
     plt.show()
@@ -225,34 +272,62 @@ if __name__ == '__main__':
     beta_1 = 1e-4
     beta_T = 0.02
     beta = torch.linspace(beta_1, beta_T, T).to(device)
-    alpha = 1 - beta
-    alpha_bar = torch.cumprod(alpha, dim=0)
+    alpha_ = 1 - beta
+    alpha_bar = torch.cumprod(alpha_, dim=0)
 
     # Plot the forward diffusion process
     plot_forward_xt(T_ex=T, x0=x0.cpu(), alpha_bar=alpha_bar.cpu(), N_plots=10)
 
     # Train the model
     epochs = 100  
-    epsilon_theta = train(epochs=epochs, x0=x0, alpha_bar=alpha_bar, T=T, device=device)
+    epsilon_theta = train(epochs=epochs, 
+                          x0=x0, 
+                          alpha_bar=alpha_bar, 
+                          T=T, 
+                          device=device)
 
-    T_sample = 50
     # Generate new samples
-    x_sample = sample_one(
+    X_original = x0.numpy()
+    
+    T_sample_1 = 1000
+    # calculate time to sample one feature
+    start_time = time.time()
+    x_sample_1 = sample_one(
         model=epsilon_theta,
         x0_shape=x0.shape,
-        alpha=alpha,
+        alpha=alpha_,
         beta=beta,
         alpha_bar=alpha_bar,
-        T=T_sample,
+        T=T_sample_1,
         device=device,
     )
-    x_sample = x_sample.numpy()
-    X_original = x0.numpy()
+    x_sample_1 = x_sample_1.numpy()
+    end_time = time.time()
+    print(f'Time to sample one feature of shape={x_sample_1.shape}: {end_time - start_time:.2f} seconds')
+    
 
+    T_sample_2 = 50
+    x_sample_2 = sample_one(
+        model=epsilon_theta,
+        x0_shape=x0.shape,
+        alpha=alpha_,
+        beta=beta,
+        alpha_bar=alpha_bar,
+        T=T_sample_2,
+        device=device,
+    )
+    x_sample_2 = x_sample_2.numpy()
+    
     # Plot the generated samples and original data
-    plt.figure(figsize=(8, 6))
-    plt.scatter(x_sample[:, 0], x_sample[:, 1], s=10, label='Generated Samples')
-    plt.scatter(X_original[:, 0], X_original[:, 1], s=10, alpha=0.2, label='Original Data')
-    plt.legend()
-    plt.title('Generated Samples vs Original Data')
+    fig, axs = plt.subplots(1, 2, figsize=(16, 8))
+    axs[0].scatter(x_sample_1[:, 0], x_sample_1[:, 1], s=10, label='Generated Samples', alpha=0.4)
+    axs[0].scatter(X_original[:, 0], X_original[:, 1], s=10, label='Original Data', alpha=0.4)
+    axs[0].legend()
+    axs[0].set_title(r'Generated Samples vs Original Data, $T_{sample}=T_{train}=$ %d' % T_sample_1)
+
+    axs[1].scatter(x_sample_2[:, 0], x_sample_2[:, 1], s=10, label='Generated Samples', alpha=0.4)
+    axs[1].scatter(X_original[:, 0], X_original[:, 1], s=10, alpha=0.4, label='Original Data')
+    axs[1].legend()
+    axs[1].set_title(r'Generated Samples vs Original Data, $T_{sample}=$ %d' % T_sample_2)
+
     plt.show()
