@@ -36,7 +36,7 @@ data_args = {
 # "jet_features": ["type", "pt", "eta", "mass"],
 "jet_features": ["type","pt", "eta", "mass"],
     # "download": True,
-    "download": True,
+    "download": False,
 }
 
 particle_data, jet_data = JetNet.getData(**data_args)
@@ -53,7 +53,7 @@ if jets_or_particles == 'jets':
 else:
     x0 = particle_data
 
-SUBSET = int(1e5)
+SUBSET = int(1e3)
 # SUBSET = -1
 x0_red = x0[:SUBSET]
 
@@ -64,6 +64,8 @@ if jets_or_particles == 'jets':
         ax[i].hist(x0_red[:,i],bins=100);
 
     plt.show()
+    
+    ############################################################
     
     x0_red = torch.tensor(x0_red, dtype=torch.float32).to(device)
     print(f'x0.shape={x0_red.shape}')
@@ -120,7 +122,10 @@ elif jets_or_particles == "particles":
     print(f'num_types: {num_types}')
     type_indices = {jet_type: JetNet.JET_TYPES.index(jet_type) for jet_type in data_args["jet_type"]}# these are special indices for gluon, top quark, and W boson jets
     print(f'type_indices: {type_indices}') 
+    
+    
     selected_observables = ['mass', 'pt', 'eta']
+    selected_observables_labels = ['$m^{rel}$', '$p_T^{rel}$', '$\eta^{rel}$']
     jet_types = ['g', 't', 'w']
     
     fig, ax = plt.subplots(1,len(selected_observables), figsize=(10,10))
@@ -132,9 +137,31 @@ elif jets_or_particles == "particles":
                 selected_observable=observable,
                 jet_type=jet_type)
             ax[ind].hist(substruc_observable, histtype='step', label=jet_type)
-            ax[ind].set_xlabel(observable)
+            ax[ind].set_xlabel(selected_observables_labels[ind])
             ax[ind].legend()
     
+    plt.tight_layout()  
     plt.show()
+    
+    ############################################################
+    flattened_x0 = x0_red.reshape(-1, 3)
+    flat_x0_red = torch.tensor(flattened_x0, dtype=torch.float32).to(device)
+    print(f'x0.shape={flat_x0_red.shape}')
+    # Total time steps T
+    T = 1000
+    # Noise scheduler beta_t, which goes from beta_1 to beta_T
+    beta_1 = 1e-4
+    beta_T = 0.02
+    beta = torch.linspace(beta_1, beta_T, T).to(device)
+    alpha_ = 1 - beta
+    alpha_bar = torch.cumprod(alpha_, dim=0)
+    
+        # Train the model
+    epochs = 50
+    epsilon_theta, x0_mean, x0_std = train_substructure(epochs=epochs, 
+                    x0=flat_x0_red, 
+                    alpha_bar=alpha_bar, 
+                    T=T, 
+                    device=device)
     
     
