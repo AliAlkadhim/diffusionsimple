@@ -40,58 +40,10 @@ type_indices = {jet_type: JetNet.JET_TYPES.index(jet_type) for jet_type in data_
 print(f'type_indices: {type_indices}') 
 
 
-x0 = particle_data
-x0_red = x0[:SUBSET]
+x_sample_1_denormalized = np.load('samples/particles_sample_1_T_sample_100_epochs_50.npy')
 
-
-flattened_x0 = x0_red.reshape(-1, 3)
-flat_x0_red = torch.tensor(flattened_x0, dtype=torch.float32).to(device)
-print(f'x0.shape={flat_x0_red.shape}')
-
-
-
-x0_mean = flat_x0_red.mean(dim=0).cpu().numpy()
-x0_std = flat_x0_red.std(dim=0).cpu().numpy()
-
-# load model
-
-epsilon_theta = Epsilon(
-nfeatures=flat_x0_red.shape[1],
-ntargets=flat_x0_red.shape[1],
-nlayers=n_layers,
-hidden_size=hidden_size,
-activation='ReLU',
-time_embedding_dim=time_embedding_dim,
-).to(device)
-
-epsilon_theta.load_state_dict(torch.load(f'models/weights/particles_epsilon_theta_{epochs}_epochs_MLP.pth'))
-
-start_time = time.time()
-x_sample_1 = sample_one(
-    model=epsilon_theta,
-    x0_shape=flat_x0_red.shape,
-    alpha=alpha_,
-    beta=beta,
-    alpha_bar=alpha_bar,
-    T=T_sample_1,
-    device=device,
-)
-x_sample_1 = x_sample_1.cpu().numpy()
-end_time = time.time()
-print(f'Time to sample one feature of shape={x_sample_1.shape}: {end_time - start_time:.2f} seconds')
-
-    ### denormalize and plot
-
-x_sample_1_denormalized = x0_mean + x_sample_1 * x0_std
-
-x_sample_1_denormalized = x_sample_1_denormalized.reshape(x0_red.shape)
-
-if not os.path.exists('samples'):
-    os.makedirs('samples')
-np.save(f'samples/particles_sample_1_T_sample_{T_sample_1}_epochs_{epochs}_subset_{str(SUBSET)}.npy',x_sample_1_denormalized)
-print(f'SAVED samples/particles_sample_1_T_sample_{T_sample_1}_epochs_{epochs}_subset_{str(SUBSET)}.npy')
-
-
+print(f'x_sample_1_denormalized.shape: {x_sample_1_denormalized.shape}')
+x_sample_1_denormalized.reshape(particle_data.shape)
 fig, ax = plt.subplots(1,len(selected_observables), figsize=(10,10))
 for ind, observable in enumerate(selected_observables):
     for jet_type in jet_types:

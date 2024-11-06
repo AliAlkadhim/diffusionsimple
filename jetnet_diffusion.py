@@ -15,7 +15,7 @@ np.random.seed(42)
 import time
 from jetnet.datasets import JetNet
 from jetnet.utils import jet_features
-
+from configs import *
 
 def time_type_of_func(_func=None):
     def timer(func):
@@ -268,10 +268,10 @@ def train_substructure(epochs, x0, alpha_bar, T, device):
     model = Epsilon(
         nfeatures=x0.shape[1],
         ntargets=x0.shape[1],
-        nlayers=4,
-        hidden_size=128,
+        nlayers=n_layers,
+        hidden_size=hidden_size,
         activation='ReLU',
-        time_embedding_dim=128,
+        time_embedding_dim=time_embedding_dim,
     ).to(device)
     print(model)
     optimizer = optim.Adam(model.parameters(), lr=1e-3)
