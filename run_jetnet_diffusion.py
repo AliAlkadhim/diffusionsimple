@@ -37,7 +37,7 @@ data_args = {
 # "jet_features": ["type", "pt", "eta", "mass"],
 "jet_features": ["type","pt", "eta", "mass"],
     # "download": True,
-    "download": False,
+    "download": True,
 }
 
 particle_data, jet_data = JetNet.getData(**data_args)
@@ -54,7 +54,7 @@ if jets_or_particles == 'jets':
 else:
     x0 = particle_data
 
-SUBSET = int(1e3)
+SUBSET = int(1e4)
 # SUBSET = -1
 x0_red = x0[:SUBSET]
     
@@ -184,7 +184,7 @@ elif jets_or_particles == "particles":
         T=T_sample_1,
         device=device,
     )
-    x_sample_1 = x_sample_1.numpy()
+    x_sample_1 = x_sample_1.cpu().numpy()
     end_time = time.time()
     print(f'Time to sample one feature of shape={x_sample_1.shape}: {end_time - start_time:.2f} seconds')
     
@@ -210,7 +210,7 @@ elif jets_or_particles == "particles":
     plt.show()
     
     ## evaluation metrics
-    fpnd_score = jetnet.evaluation.fpnd(x_sample_1_denormalized)
-    print(f'fpnd_score: {fpnd_score}')
+    # fpnd_score = jetnet.evaluation.fpnd(x_sample_1_denormalized)
+    # print(f'fpnd_score: {fpnd_score}')
     
     

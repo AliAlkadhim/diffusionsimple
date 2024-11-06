@@ -5,7 +5,7 @@ import torch
 import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
-
+import os
 
 import torch.optim as optim
 import torch.nn as nn
@@ -256,7 +256,7 @@ def train(epochs, x0, alpha_bar, T, device):
         if epoch % 10 == 0:
             print(f'Epoch {epoch}/{epochs}, Loss: {avg_loss:.6f}')
 
-    return model, x0_mean.numpy(), x0_std.numpy() 
+    return model, x0_mean.cpu().numpy(), x0_std.cpu().numpy() 
 
 
 
@@ -313,7 +313,12 @@ def train_substructure(epochs, x0, alpha_bar, T, device):
         if epoch % 10 == 0:
             print(f'Epoch {epoch}/{epochs}, Loss: {avg_loss:.6f}')
 
-    return model, x0_mean.numpy(), x0_std.numpy() 
+    if not os.path.exists('models'):
+        os.makedirs('models')
+    if not os.path.exists('models/weights'):
+        os.makedirs('models/weights')
+    torch.save(model.state_dict(), f'models/weights/particles_epsilon_theta_{epochs}_epochs_MLP.pth')
+    return model, x0_mean.cpu().numpy(), x0_std.cpu().numpy() 
 
 
 def get_substructure_feature(jet_data,      
@@ -338,6 +343,9 @@ def get_substructure_feature(jet_data,
         print(f"Particle data shape: {particle_data.shape}")
         print(f"Selected particles shape: {selected_particles.shape}")
         raise e
+
+
+
 
 
 
