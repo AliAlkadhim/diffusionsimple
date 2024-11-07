@@ -1,7 +1,7 @@
 import torch
 import numpy as np
-# SUBSET = int(1e5)
-SUBSET = None
+SUBSET = int(1e5)
+# SUBSET = None
 
 # Set device (use GPU if available)
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -24,11 +24,11 @@ selected_observables_labels = ['$m^{rel}$', '$p_T^{rel}$', '$\eta^{rel}$']
 jet_types = ['g', 't', 'w']
 
 
-n_layers = 4
-hidden_size = 128
+n_layers = 2
+hidden_size = 32
 time_embedding_dim = 128
 
-epochs = 500
+epochs = 20
 
 # Total time steps T
 T = 1000
@@ -38,4 +38,4 @@ beta = torch.linspace(beta_1, beta_T, T).to(device)
 alpha_ = 1 - beta
 alpha_bar = torch.cumprod(alpha_, dim=0)
 
-T_sample_1 = 60
+T_sample_1 = 1000

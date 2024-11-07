@@ -60,7 +60,8 @@ alpha_ = 1 - beta
 alpha_bar = torch.cumprod(alpha_, dim=0)
 
     # Train the model
-epsilon_theta, x0_mean, x0_std = train_substructure(epochs=epochs, 
+epsilon_theta, x0_mean, x0_std = train_substructure(model_type='gnn',
+    epochs=epochs, 
                 x0=flat_x0_red, 
                 alpha_bar=alpha_bar, 
                 T=T, 

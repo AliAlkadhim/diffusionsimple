@@ -16,7 +16,7 @@ from jetnet.utils import jet_features
 
 from jetnet_diffusion import *
 from configs import *
-
+from models import *
 
     # Set device (use GPU if available)
 # device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -30,8 +30,10 @@ print(f'particle_data.shape: {particle_data.shape}')
 jet_data = np.load('datasets/jetnet/jet_data.npy')
 
 print('using substructure')
-jet_data = jet_data[:SUBSET]
-particle_data = particle_data[:SUBSET, :, :]
+if SUBSET is not None:
+    jet_data = jet_data[:SUBSET]
+    particle_data = particle_data[:SUBSET, :, :]
+    
 print(f'jet_data.shape: {jet_data.shape}')
 print(f'particle_data.shape: {particle_data.shape}')
 num_types = len(data_args["jet_type"])
@@ -41,8 +43,10 @@ print(f'type_indices: {type_indices}')
 
 
 x0 = particle_data
-x0_red = x0[:SUBSET]
-
+if SUBSET is not None:
+    x0_red = x0[:SUBSET]
+else:
+    x0_red = x0
 
 flattened_x0 = x0_red.reshape(-1, 3)
 flat_x0_red = torch.tensor(flattened_x0, dtype=torch.float32).to(device)
@@ -64,7 +68,7 @@ activation='ReLU',
 time_embedding_dim=time_embedding_dim,
 ).to(device)
 
-epsilon_theta.load_state_dict(torch.load(f'models/weights/particles_epsilon_theta_{epochs}_epochs_MLP.pth'))
+epsilon_theta.load_state_dict(torch.load(f'models/weights/particles_epsilon_theta_{epochs}_epochs_MLP_nlayers_{n_layers}_hidden_size_{hidden_size}.pth'))
 
 start_time = time.time()
 x_sample_1 = sample_one(
@@ -88,8 +92,12 @@ x_sample_1_denormalized = x_sample_1_denormalized.reshape(x0_red.shape)
 
 if not os.path.exists('samples'):
     os.makedirs('samples')
-np.save(f'samples/particles_sample_1_T_sample_{T_sample_1}_epochs_{epochs}_subset_{str(SUBSET)}.npy',x_sample_1_denormalized)
-print(f'SAVED samples/particles_sample_1_T_sample_{T_sample_1}_epochs_{epochs}_subset_{str(SUBSET)}.npy')
+
+sample_filename = f'samples/particles_sample_1_T_sample_{T_sample_1}_epochs_{epochs}_nlayers_{n_layers}_hidden_size_{hidden_size}_subset_{str(SUBSET)}.npy'
+
+np.save(sample_filename,x_sample_1_denormalized)
+
+print(f'SAVED {sample_filename}')
 
 
 fig, ax = plt.subplots(1,len(selected_observables), figsize=(10,10))

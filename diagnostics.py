@@ -30,8 +30,13 @@ print(f'particle_data.shape: {particle_data.shape}')
 jet_data = np.load('datasets/jetnet/jet_data.npy')
 
 print('using substructure')
-jet_data = jet_data[:SUBSET]
-particle_data = particle_data[:SUBSET, :, :]
+if SUBSET is not None:
+    jet_data = jet_data[:SUBSET]
+    particle_data = particle_data[:SUBSET, :, :]
+else:
+    jet_data = jet_data
+    particle_data = particle_data
+
 print(f'jet_data.shape: {jet_data.shape}')
 print(f'particle_data.shape: {particle_data.shape}')
 num_types = len(data_args["jet_type"])
@@ -40,8 +45,15 @@ type_indices = {jet_type: JetNet.JET_TYPES.index(jet_type) for jet_type in data_
 print(f'type_indices: {type_indices}') 
 
 
-sample_filename = f'samples/particles_sample_1_T_sample_{T_sample_1}_epochs_{epochs}_subset_{str(SUBSET)}.npy'
+sample_filename = f'samples/particles_sample_1_T_sample_{T_sample_1}_epochs_{epochs}_nlayers_{n_layers}_hidden_size_{hidden_size}_subset_{str(SUBSET)}.npy'
+print(f'sample_filename: {sample_filename}')
+
 x_sample_1_denormalized = np.load(sample_filename)
+
+if SUBSET is not None:
+    x_sample_1_denormalized = x_sample_1_denormalized[:SUBSET]
+else:
+    x_sample_1_denormalized = x_sample_1_denormalized
 
 print(f'x_sample_1_denormalized.shape: {x_sample_1_denormalized.shape}')
 
@@ -69,5 +81,8 @@ for jet_type in jet_types:
     w1m_score = jetnet.evaluation.w1m(particles_jet_type,generated_jet_type_particles) 
     print(f'w1m score for {jet_type} jet type: {w1m_score}')
 
-    w1efp_score = jetnet.evaluation.w1efp(particles_jet_type,generated_jet_type_particles, use_particle_masses=True) 
+    w1efp_score = jetnet.evaluation.w1efp(particles_jet_type,generated_jet_type_particles, 
+    
+    # use_particle_masses=True
+    ) 
     print(f'w1efp score for {jet_type} jet type: {w1efp_score}')

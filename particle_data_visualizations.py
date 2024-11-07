@@ -60,5 +60,25 @@ def plot_particle_data_observables(jet_data, particle_data, type_indices, select
     plt.tight_layout()  
     plt.show()
 
-plot_particle_data_observables(jet_data=jet_data, 
-particle_data=particle_data, type_indices=type_indices, selected_observables=selected_observables, jet_types=jet_types)
+def plot_particle_data_3d(particle_data, ax, jet_order):
+    particle_i = particle_data[jet_order, :, :]
+    ax.scatter(particle_i[:,0], particle_i[:,1], particle_i[:,2], label=f'jet {jet_order}')
+    ax.set_xlabel('$m^{rel}$')
+    ax.set_ylabel('$p_T^{rel}$')
+    ax.set_zlabel('$\eta^{rel}$')
+    ax.legend()
+
+if __name__ == '__main__':
+    # plot_particle_data_observables(jet_data=jet_data, 
+    # particle_data=particle_data, type_indices=type_indices, selected_observables=selected_observables, jet_types=jet_types)
+
+    first_particle_data = particle_data[0, :, :]
+    fig = plt.figure()
+    ax = fig.add_subplot(projection='3d')
+
+    plot_particle_data_3d(particle_data=particle_data, ax=ax, jet_order=0)
+
+    plot_particle_data_3d(particle_data=particle_data, ax=ax, jet_order=1)
+
+    plot_particle_data_3d(particle_data=particle_data, ax=ax, jet_order=2)
+    plt.show()

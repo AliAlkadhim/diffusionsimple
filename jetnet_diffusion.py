@@ -1,14 +1,20 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-import torch
 import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
 import os
 
+import torch
 import torch.optim as optim
 import torch.nn as nn
+from torch.nn import Linear
+import torch.nn.functional as F 
+from torch_geometric.nn import GCNConv, TopKPooling, global_mean_pool
+from torch_geometric.nn import global_mean_pool as gap, global_max_pool as gmp
+
+
 from sklearn.datasets import make_moons
 # Set numpy random seed for reproducibility
 np.random.seed(42)
@@ -16,6 +22,7 @@ import time
 from jetnet.datasets import JetNet
 from jetnet.utils import jet_features
 from configs import *
+from models import *
 
 def time_type_of_func(_func=None):
     def timer(func):
@@ -49,72 +56,17 @@ def sinusoidal_embedding(timesteps, embedding_dim):
     """
     device = timesteps.device
     half_dim = embedding_dim // 2
+    # emb is of shape [half_dim]
     emb = torch.exp(
         -torch.log(torch.tensor(10000.0)) * torch.arange(half_dim, device=device) / (half_dim - 1)
     )
+    # if timesteps had original shape [batch_size], timesteps[:, None] will make it [batch_size, 1]
     emb = timesteps[:, None] * emb[None, :]
+    # emb is now of shape [1, batch_size, half_dim]
     emb = torch.cat([torch.sin(emb), torch.cos(emb)], dim=1)
     return emb
 
-# Epsilon neural network model
-class Epsilon(nn.Module):
-    """Neural network model for noise prediction
-    epsilon_theta: x_t, t -> noise
-    """
 
-    def __init__(
-        self,
-        nfeatures,
-        ntargets,
-        nlayers,
-        hidden_size,
-        activation,
-        time_embedding_dim=128,
-    ):
-        super().__init__()
-        self.time_embedding_dim = time_embedding_dim
-
-        # Time embedding layer
-        self.time_mlp = nn.Sequential(
-            nn.Linear(time_embedding_dim, hidden_size),
-            self._get_activation(activation),
-        )
-
-        # Input layer for x_t
-        self.input_layer = nn.Sequential(
-            nn.Linear(nfeatures, hidden_size),
-            self._get_activation(activation),
-        )
-
-        # Hidden layers
-        layers = []
-        for _ in range(nlayers - 1):
-            layers.append(nn.Linear(hidden_size, hidden_size))
-            layers.append(self._get_activation(activation))
-        self.hidden_layers = nn.Sequential(*layers)
-
-        # Output layer
-        self.output_layer = nn.Linear(hidden_size, ntargets)
-
-    def _get_activation(self, activation):
-        activations = {
-            "LeakyReLU": nn.LeakyReLU(negative_slope=0.3),
-            "ReLU": nn.ReLU(),
-            "PReLU": nn.PReLU(),
-            "ReLU6": nn.ReLU6(),
-            "ELU": nn.ELU(),
-            "SELU": nn.SELU(),
-            "CELU": nn.CELU(),
-        }
-        return activations.get(activation, nn.ReLU())  # Default to ReLU if activation is not found
-
-    def forward(self, x, t_embedding):
-        # Combine x and t embeddings
-        x = self.input_layer(x) 
-        t_emb = self.time_mlp(t_embedding)
-        h = x + t_emb  # Alternatively, you can concatenate and use another layer 
-        h = self.hidden_layers(h)
-        return self.output_layer(h)
 
 # Function to get x_t and noise epsilon at time t
 # @time_type_of_func()
@@ -175,7 +127,7 @@ def sample_one(model, x0_shape, alpha, beta, alpha_bar, T, device):
         x_t = torch.randn(x0_shape).to(device)
         
         for i in reversed(range(T)):
-            
+            print(f't: {i}')
             t = torch.full((x0_shape[0],), i, dtype=torch.long).to(device)
             
             t_embedding = sinusoidal_embedding(t, model.time_embedding_dim).to(device)
@@ -204,18 +156,29 @@ def sample_one(model, x0_shape, alpha, beta, alpha_bar, T, device):
 
 # Training function
 @time_type_of_func()
-def train(epochs, x0, alpha_bar, T, device):
+def train(model_type,epochs, x0, alpha_bar, T, device):
     """
     Train the model to predict the noise
     """
-    model = Epsilon(
-        nfeatures=x0.shape[1],
+    if model_type == 'mlp':
+        model = Epsilon(
+            nfeatures=x0.shape[1],
         ntargets=x0.shape[1],
         nlayers=4,
         hidden_size=128,
         activation='ReLU',
         time_embedding_dim=128,
-    ).to(device)
+        ).to(device)
+    elif model_type == 'gnn':
+        model = GNN(
+            nfeatures=x0.shape[1],
+            ntargets=x0.shape[1],
+            nlayers=4,
+            hidden_size=128,
+            activation='ReLU',
+            time_embedding_dim=128,
+        ).to(device)
+
     print(model)
     optimizer = optim.Adam(model.parameters(), lr=1e-3)
     loss_fn = nn.MSELoss()
@@ -241,7 +204,14 @@ def train(epochs, x0, alpha_bar, T, device):
             
             t_embedding = sinusoidal_embedding(t, model.time_embedding_dim).to(device)
             
-            predicted_noise = model(xt, t_embedding)
+            if model_type == 'mlp':
+                predicted_noise = model(x=xt, t_embedding=t_embedding)
+            elif model_type == 'gnn':
+                num_nodes = xt.shape[0]
+                
+                edge_index = torch.combinations(torch.arange(num_nodes)).t().to(device)
+
+                predicted_noise = model(x=xt, edge_index=edge_index, t_embedding=t_embedding)
             
             loss = loss_fn(predicted_noise, noise)
             
@@ -261,29 +231,41 @@ def train(epochs, x0, alpha_bar, T, device):
 
 
 @time_type_of_func()
-def train_substructure(epochs, x0, alpha_bar, T, device):
+def train_substructure(model_type,epochs, x0, alpha_bar, T, device):
     """
     Train the model to predict the noise
     """
-    model = Epsilon(
-        nfeatures=x0.shape[1],
+    if model_type == 'mlp':
+        model = Epsilon(
+            nfeatures=x0.shape[1],
         ntargets=x0.shape[1],
         nlayers=n_layers,
         hidden_size=hidden_size,
         activation='ReLU',
         time_embedding_dim=time_embedding_dim,
-    ).to(device)
+        ).to(device)
+    elif model_type == 'gnn':
+        model = GNN(
+            nfeatures=x0.shape[1],
+            ntargets=x0.shape[1],
+            nlayers=n_layers,
+            hidden_size=hidden_size,
+            activation='ReLU',
+            time_embedding_dim=time_embedding_dim,
+        ).to(device)
     print(model)
     optimizer = optim.Adam(model.parameters(), lr=1e-3)
     loss_fn = nn.MSELoss()
     model.train()
 
-    batch_size = 256  
+    batch_size = 256
     x0_mean = x0.mean(dim=0)
     x0_std = x0.std(dim=0)
     normalized_x0 = (x0 - x0_mean) / x0_std
     dataset = torch.utils.data.TensorDataset(normalized_x0)
-    dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True)
+    dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, 
+    # shuffle=True
+    )
 
     for epoch in range(epochs):
         epoch_loss = 0.0
@@ -297,8 +279,15 @@ def train_substructure(epochs, x0, alpha_bar, T, device):
             xt, noise = get_x_t(batch_x0, t, alpha_bar)
             
             t_embedding = sinusoidal_embedding(t, model.time_embedding_dim).to(device)
-            
-            predicted_noise = model(xt, t_embedding)
+            # t_embedding will be of shape [batch_size, time_embedding_dim]
+            if model_type == 'mlp':
+                predicted_noise = model(x=xt, t_embedding=t_embedding)
+            elif model_type == 'gnn':
+                num_nodes = xt.shape[0]
+                
+                edge_index = torch.combinations(torch.arange(num_nodes)).t().to(device)
+
+                predicted_noise = model(x=xt, edge_index=edge_index, t_embedding=t_embedding)
             
             loss = loss_fn(predicted_noise, noise)
             
@@ -309,7 +298,8 @@ def train_substructure(epochs, x0, alpha_bar, T, device):
             epoch_loss += loss.item() * batch_x0.size(0)
        
         avg_loss = epoch_loss / len(dataloader.dataset)
-       
+        print(f'epoch: {epoch}, loss: {avg_loss:.6f}')
+
         if epoch % 10 == 0:
             print(f'Epoch {epoch}/{epochs}, Loss: {avg_loss:.6f}')
 
@@ -317,7 +307,7 @@ def train_substructure(epochs, x0, alpha_bar, T, device):
         os.makedirs('models')
     if not os.path.exists('models/weights'):
         os.makedirs('models/weights')
-    torch.save(model.state_dict(), f'models/weights/particles_epsilon_theta_{epochs}_epochs_MLP.pth')
+    torch.save(model.state_dict(), f'models/weights/particles_epsilon_theta_{epochs}_epochs_MLP_nlayers_{n_layers}_hidden_size_{hidden_size}.pth')
     return model, x0_mean.cpu().numpy(), x0_std.cpu().numpy() 
 
 
