@@ -40,15 +40,34 @@ type_indices = {jet_type: JetNet.JET_TYPES.index(jet_type) for jet_type in data_
 print(f'type_indices: {type_indices}') 
 
 
-x_sample_1_denormalized = np.load('samples/particles_sample_1_T_sample_30_epochs_50.npy')
+sample_filename = f'samples/particles_sample_1_T_sample_{T_sample_1}_epochs_{epochs}_subset_{str(SUBSET)}.npy'
+x_sample_1_denormalized = np.load(sample_filename)
 
 print(f'x_sample_1_denormalized.shape: {x_sample_1_denormalized.shape}')
 
 
-
 jet_type = 'g'
 type_selector = jet_data[:, 0] == type_indices[jet_type]  # type_indices: {'g': 0, 't': 2, 'w': 3}
-generated_gluon_particles = x_sample_1_denormalized[type_selector]
+particle_data_g = particle_data[type_selector]
+fpnd_score_jetnet = jetnet.evaluation.fpnd(particle_data_g, jet_type="g")
+print(f'fpnd_score for {jet_type} jet type between jetnet and jetnet: {fpnd_score_jetnet}')
 
-fpnd_score = jetnet.evaluation.fpnd(generated_gluon_particles, jet_type="g")
-print(f'fpnd_score: {fpnd_score}')
+# see https://jetnet.readthedocs.io/en/latest/pages/metrics.html
+for jet_type in jet_types:
+    # jet_type = 'g'
+    type_selector = jet_data[:, 0] == type_indices[jet_type]  # type_indices: {'g': 0, 't': 2, 'w': 3}
+    particles_jet_type = particle_data[type_selector]
+
+    generated_jet_type_particles = x_sample_1_denormalized[type_selector]
+
+    fpnd_score = jetnet.evaluation.fpnd(generated_jet_type_particles, jet_type="g")
+    print(f'fpnd_score for {jet_type} jet type: {fpnd_score}')
+
+    w1p_score = jetnet.evaluation.w1p(particles_jet_type,generated_jet_type_particles) 
+    print(f'w1p score for {jet_type} jet type: {w1p_score}')
+
+    w1m_score = jetnet.evaluation.w1m(particles_jet_type,generated_jet_type_particles) 
+    print(f'w1m score for {jet_type} jet type: {w1m_score}')
+
+    w1efp_score = jetnet.evaluation.w1efp(particles_jet_type,generated_jet_type_particles, use_particle_masses=True) 
+    print(f'w1efp score for {jet_type} jet type: {w1efp_score}')
