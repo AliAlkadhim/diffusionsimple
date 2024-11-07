@@ -24,11 +24,13 @@ selected_observables_labels = ['$m^{rel}$', '$p_T^{rel}$', '$\eta^{rel}$']
 jet_types = ['g', 't', 'w']
 
 
+model_type = 'mlp'# 'gnn' or 'mlp'
 n_layers = 2
 hidden_size = 32
 time_embedding_dim = 128
 
-epochs = 20
+BATCHSIZE = 256
+epochs = 2
 
 # Total time steps T
 T = 1000
@@ -38,4 +40,4 @@ beta = torch.linspace(beta_1, beta_T, T).to(device)
 alpha_ = 1 - beta
 alpha_bar = torch.cumprod(alpha_, dim=0)
 
-T_sample_1 = 1000
+T_sample_1 = 100

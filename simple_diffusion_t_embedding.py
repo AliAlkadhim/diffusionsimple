@@ -256,7 +256,7 @@ if __name__ == '__main__':
     print(f'Using device: {device}')
 
     # Generate the dataset
-    X, _ = make_moons(n_samples=3000, 
+    X, _ = make_moons(n_samples=30000, 
                       noise=0, 
                       random_state=0)
     plt.scatter(X[:, 0], X[:, 1], s=10)
@@ -287,7 +287,7 @@ if __name__ == '__main__':
                           device=device)
 
     # Generate new samples
-    X_original = x0.numpy()
+    X_original = x0.cpu().numpy()
     
     T_sample_1 = 1000
     # calculate time to sample one feature
@@ -301,12 +301,12 @@ if __name__ == '__main__':
         T=T_sample_1,
         device=device,
     )
-    x_sample_1 = x_sample_1.numpy()
+    x_sample_1 = x_sample_1.cpu().numpy()
     end_time = time.time()
     print(f'Time to sample one feature of shape={x_sample_1.shape}: {end_time - start_time:.2f} seconds')
     
 
-    T_sample_2 = 50
+    T_sample_2 = 200
     x_sample_2 = sample_one(
         model=epsilon_theta,
         x0_shape=x0.shape,
@@ -316,18 +316,18 @@ if __name__ == '__main__':
         T=T_sample_2,
         device=device,
     )
-    x_sample_2 = x_sample_2.numpy()
+    x_sample_2 = x_sample_2.cpu().numpy()
     
     # Plot the generated samples and original data
     fig, axs = plt.subplots(1, 2, figsize=(16, 8))
     axs[0].scatter(x_sample_1[:, 0], x_sample_1[:, 1], s=10, label='Generated Samples', alpha=0.4)
     axs[0].scatter(X_original[:, 0], X_original[:, 1], s=10, label='Original Data', alpha=0.4)
     axs[0].legend()
-    axs[0].set_title(r'Generated Samples vs Original Data, $T_{sample}=T_{train}=$ %d' % T_sample_1)
+    axs[0].set_title(r'Generated Samples vs Original Data, $T_{train}=T_{sample}=$ %d' % T_sample_1)
 
     axs[1].scatter(x_sample_2[:, 0], x_sample_2[:, 1], s=10, label='Generated Samples', alpha=0.4)
     axs[1].scatter(X_original[:, 0], X_original[:, 1], s=10, alpha=0.4, label='Original Data')
     axs[1].legend()
-    axs[1].set_title(r'Generated Samples vs Original Data, $T_{sample}=$ %d' % T_sample_2)
-
+    axs[1].set_title(r'Generated Samples vs Original Data, $T_{train}= %d, T_{sample}=$ %d' % (T, T_sample_2))
+    plt.savefig('images/moons_diffusion_MLP.pdf')
     plt.show()

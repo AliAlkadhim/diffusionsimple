@@ -58,9 +58,9 @@ beta_T = 0.02
 beta = torch.linspace(beta_1, beta_T, T).to(device)
 alpha_ = 1 - beta
 alpha_bar = torch.cumprod(alpha_, dim=0)
-
+print(f'alpha_bar: {alpha_bar}')
     # Train the model
-epsilon_theta, x0_mean, x0_std = train_substructure(model_type='gnn',
+epsilon_theta, x0_mean, x0_std = train_substructure(model_type=model_type,
     epochs=epochs, 
                 x0=flat_x0_red, 
                 alpha_bar=alpha_bar, 

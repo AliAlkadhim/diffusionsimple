@@ -45,7 +45,16 @@ type_indices = {jet_type: JetNet.JET_TYPES.index(jet_type) for jet_type in data_
 print(f'type_indices: {type_indices}') 
 
 
-sample_filename = f'samples/particles_sample_1_T_sample_{T_sample_1}_epochs_{epochs}_nlayers_{n_layers}_hidden_size_{hidden_size}_subset_{str(SUBSET)}.npy'
+sample_filename = get_sample_filename(
+    T_sample_1=T_sample_1, 
+    epochs=epochs, 
+    n_layers=n_layers, 
+    hidden_size=hidden_size, 
+    model_type=model_type, 
+    subset=SUBSET
+    )
+
+
 print(f'sample_filename: {sample_filename}')
 
 x_sample_1_denormalized = np.load(sample_filename)

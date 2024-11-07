@@ -39,6 +39,7 @@ class Epsilon(nn.Module):
         self.time_embedding_dim = time_embedding_dim
 
         # Time embedding layer
+        #project time embedding dimension to hidden size
         self.time_mlp = nn.Sequential(
             nn.Linear(time_embedding_dim, hidden_size),
             self._get_activation(activation),
@@ -104,6 +105,7 @@ class GNN(nn.Module):
         
         # Hidden layers
         self.convs = nn.ModuleList()
+        #we're using ModuleList because an ordinary list wont be optimized by PyTorch
         for _ in range(nlayers - 1):
             self.convs.append(GCNConv(hidden_size, hidden_size))
         
@@ -123,18 +125,27 @@ class GNN(nn.Module):
             }
             return activations.get(activation, nn.ReLU())  # Default to ReLU if activation is not found
 
-    def forward(self, x, edge_index, t_embedding):
+    def forward(self, x, edge_index, t_embedding, batch):
+        """
+        edge_index is a tensor containing pairs of connected node indices
+        
+        batch is a tensor containing the batch indices for each node
+        """
         # Process time embedding
         t_emb = self.time_mlp(t_embedding)
-        
+        #t_emb now has shape [num_nodes, hidden_size] 
         # Initial convolution
         h = self.conv1(x, edge_index)
+        #Considers the graph structure defined by edge_index
         h = self.activation(h)
+        
         h = h + t_emb  # Add time embedding
         
         # Hidden layers
         for conv in self.convs:
             h = conv(h, edge_index)
             h = self.activation(h)
+
+        h = global_mean_pool(h, batch)
         
         return self.output_layer(h)

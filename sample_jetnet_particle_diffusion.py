@@ -45,9 +45,13 @@ print(f'type_indices: {type_indices}')
 x0 = particle_data
 if SUBSET is not None:
     x0_red = x0[:SUBSET]
+    if model_type=='gnn':
+        gnn_sampling_size = 1000
+        x0_red=x0_red[:gnn_sampling_size]
 else:
     x0_red = x0
 
+original_shape = x0_red.shape
 flattened_x0 = x0_red.reshape(-1, 3)
 flat_x0_red = torch.tensor(flattened_x0, dtype=torch.float32).to(device)
 print(f'x0.shape={flat_x0_red.shape}')
@@ -58,17 +62,34 @@ x0_mean = flat_x0_red.mean(dim=0).cpu().numpy()
 x0_std = flat_x0_red.std(dim=0).cpu().numpy()
 
 # load model
+if model_type=='mlp':
+    epsilon_theta = Epsilon(
+    nfeatures=flat_x0_red.shape[1],
+    ntargets=flat_x0_red.shape[1],
+    nlayers=n_layers,
+    hidden_size=hidden_size,
+    activation='ReLU',
+    time_embedding_dim=time_embedding_dim,
+    ).to(device)
+elif model_type=='gnn':
+    flat_x0_red=flat_x0_red[:gnn_sampling_size]
+    epsilon_theta = GNN(
+        nfeatures=flat_x0_red.shape[1],
+        ntargets=flat_x0_red.shape[1],
+        nlayers=n_layers,
+        hidden_size=hidden_size,
+        activation='ReLU',
+        time_embedding_dim=time_embedding_dim,
+    ).to(device)
 
-epsilon_theta = Epsilon(
-nfeatures=flat_x0_red.shape[1],
-ntargets=flat_x0_red.shape[1],
-nlayers=n_layers,
-hidden_size=hidden_size,
-activation='ReLU',
-time_embedding_dim=time_embedding_dim,
-).to(device)
 
-epsilon_theta.load_state_dict(torch.load(f'models/weights/particles_epsilon_theta_{epochs}_epochs_MLP_nlayers_{n_layers}_hidden_size_{hidden_size}.pth'))
+model_filename = get_model_filename(epochs = epochs, 
+                                    n_layers = n_layers, 
+                                    hidden_size = hidden_size, 
+                                    model_type = model_type)
+
+
+epsilon_theta.load_state_dict(torch.load(model_filename))
 
 start_time = time.time()
 x_sample_1 = sample_one(
@@ -79,6 +100,7 @@ x_sample_1 = sample_one(
     alpha_bar=alpha_bar,
     T=T_sample_1,
     device=device,
+    model_type=model_type,
 )
 x_sample_1 = x_sample_1.cpu().numpy()
 end_time = time.time()
@@ -88,13 +110,20 @@ print(f'Time to sample one feature of shape={x_sample_1.shape}: {end_time - star
 
 x_sample_1_denormalized = x0_mean + x_sample_1 * x0_std
 
-x_sample_1_denormalized = x_sample_1_denormalized.reshape(x0_red.shape)
+x_sample_1_denormalized = x_sample_1_denormalized.reshape(original_shape)
 
 if not os.path.exists('samples'):
     os.makedirs('samples')
 
-sample_filename = f'samples/particles_sample_1_T_sample_{T_sample_1}_epochs_{epochs}_nlayers_{n_layers}_hidden_size_{hidden_size}_subset_{str(SUBSET)}.npy'
 
+sample_filename = get_sample_filename(
+    T_sample_1=T_sample_1, 
+    epochs=epochs, 
+    n_layers=n_layers, 
+    hidden_size=hidden_size, 
+    model_type=model_type, 
+    subset=SUBSET
+    )
 np.save(sample_filename,x_sample_1_denormalized)
 
 print(f'SAVED {sample_filename}')

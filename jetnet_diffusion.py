@@ -120,7 +120,7 @@ def plot_forward_xt(T_ex, x0, alpha_bar, N_plots=10):
 
 # Function to sample new data points using the trained model
 # @time_type_of_func()
-def sample_one(model, x0_shape, alpha, beta, alpha_bar, T, device):
+def sample_one(model, x0_shape, alpha, beta, alpha_bar, T, device, model_type):
     model.eval()
     with torch.no_grad():
         
@@ -131,8 +131,14 @@ def sample_one(model, x0_shape, alpha, beta, alpha_bar, T, device):
             t = torch.full((x0_shape[0],), i, dtype=torch.long).to(device)
             
             t_embedding = sinusoidal_embedding(t, model.time_embedding_dim).to(device)
-            
-            predicted_noise = model(x_t, t_embedding)
+            if model_type=='mlp':
+                predicted_noise = model(x=x_t, t_embedding=t_embedding)
+            elif model_type=='gnn':
+                num_nodes = x_t.shape[0]
+                edge_index = torch.combinations(torch.arange(num_nodes)).t().to(device)
+                batch = torch.zeros(num_nodes, dtype=torch.long).to(device)
+                predicted_noise = model(x_t, edge_index=edge_index, t_embedding=t_embedding,
+                                        batch=batch)
             
             alpha_t = alpha[t].unsqueeze(1).to(device)
             
@@ -154,11 +160,22 @@ def sample_one(model, x0_shape, alpha, beta, alpha_bar, T, device):
     model.train()
     return x_t
 
+
+def get_sample_filename(T_sample_1, epochs, n_layers, hidden_size, model_type, subset):
+    sample_filename = f'samples/particles_sample_1_T_sample_{T_sample_1}_epochs_{epochs}_nlayers_{n_layers}_hidden_size_{hidden_size}_subset_{str(SUBSET)}_type_{model_type}.npy'
+    return sample_filename
+
+
+def get_model_filename(epochs, n_layers, hidden_size, model_type):
+    model_filename = f'models/weights/particles_epsilon_theta_{epochs}_epochs_MLP_nlayers_{n_layers}_hidden_size_{hidden_size}.pth'
+    return model_filename
+
 # Training function
 @time_type_of_func()
 def train(model_type,epochs, x0, alpha_bar, T, device):
     """
     Train the model to predict the noise
+    we pass x0 = flattened_x0 to train()
     """
     if model_type == 'mlp':
         model = Epsilon(
@@ -195,7 +212,7 @@ def train(model_type,epochs, x0, alpha_bar, T, device):
         epoch_loss = 0.0
         for batch_x0, in dataloader:
             batch_x0 = batch_x0.to(device)
-            
+            # batch_x0 
             t = torch.randint(low=0, high=T, size=(batch_x0.shape[0],), device=device)
             
             optimizer.zero_grad()
@@ -258,7 +275,7 @@ def train_substructure(model_type,epochs, x0, alpha_bar, T, device):
     loss_fn = nn.MSELoss()
     model.train()
 
-    batch_size = 256
+    batch_size = BATCHSIZE
     x0_mean = x0.mean(dim=0)
     x0_std = x0.std(dim=0)
     normalized_x0 = (x0 - x0_mean) / x0_std
@@ -282,12 +299,15 @@ def train_substructure(model_type,epochs, x0, alpha_bar, T, device):
             # t_embedding will be of shape [batch_size, time_embedding_dim]
             if model_type == 'mlp':
                 predicted_noise = model(x=xt, t_embedding=t_embedding)
+            
             elif model_type == 'gnn':
                 num_nodes = xt.shape[0]
                 
                 edge_index = torch.combinations(torch.arange(num_nodes)).t().to(device)
-
-                predicted_noise = model(x=xt, edge_index=edge_index, t_embedding=t_embedding)
+                batch = torch.zeros(num_nodes, dtype=torch.long).to(device)
+                # all nodes are connected to eachother within each batch, so assign each node to its corresponding batch index
+                predicted_noise = model(x=xt, edge_index=edge_index, t_embedding=t_embedding,
+                                        batch=batch)
             
             loss = loss_fn(predicted_noise, noise)
             
@@ -307,7 +327,9 @@ def train_substructure(model_type,epochs, x0, alpha_bar, T, device):
         os.makedirs('models')
     if not os.path.exists('models/weights'):
         os.makedirs('models/weights')
-    torch.save(model.state_dict(), f'models/weights/particles_epsilon_theta_{epochs}_epochs_MLP_nlayers_{n_layers}_hidden_size_{hidden_size}.pth')
+    model_filename = get_model_filename(epochs, n_layers, hidden_size, model_type)
+
+    torch.save(model.state_dict(), model_filename)
     return model, x0_mean.cpu().numpy(), x0_std.cpu().numpy() 
 
 
